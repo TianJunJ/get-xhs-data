@@ -1,6 +1,7 @@
 PyExecJS
-requests
-loguru
-python-dotenv
-retry
-openpyxl
+requests~=2.32.4
+loguru~=0.7.3
+python-dotenv~=1.0.1
+retry~=0.9.2
+openpyxl~=3.1.5
+tenacity~=9.0.0

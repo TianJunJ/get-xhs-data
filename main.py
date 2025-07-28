@@ -128,6 +128,7 @@ class Data_Spider():
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
 
+    # 新版本，可以一边爬取一边保存xlsx文件。不过程序运行图中不能打开这个文件，会造成读写冲突
     def spider_some_note_v2(self, notes: list, cookies_str: str, base_path: dict, save_choice: str,
                             excel_name: str = '',
                             proxies=None):

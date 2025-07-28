@@ -2,6 +2,7 @@ __pycache__
 node_modules/
 *.so
 .Python
+.idea/
 build/
 develop-eggs/
 dist/
