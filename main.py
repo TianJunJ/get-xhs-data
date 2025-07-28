@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+import openpyxl
 import requests
 from loguru import logger
 from tenacity import (
@@ -14,7 +15,7 @@ from tenacity import (
 
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init
-from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx
+from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, norm_text
 import random
 import time
 
@@ -33,7 +34,7 @@ class Data_Spider():
 
         @retry(
             stop=stop_after_attempt(5),
-            wait=wait_exponential(multiplier=1, min=4, max=40),
+            wait=wait_exponential(multiplier=1, min=4, max=65),
             retry=retry_if_exception_type((requests.RequestException, KeyError, IndexError)),
             before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True
@@ -81,8 +82,10 @@ class Data_Spider():
             logger.error(f"未处理异常: {note_url} | {str(e)}")
             return False, str(e), None
 
-    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '',
-                         proxies=None):
+    # 老版本，无法一边爬取数据一边保存到xlsx文件
+    def spider_some_note_v1(self, notes: list, cookies_str: str, base_path: dict, save_choice: str,
+                            excel_name: str = '',
+                            proxies=None):
         """
         爬取一些笔记的信息
         :param notes:
@@ -125,6 +128,81 @@ class Data_Spider():
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
 
+    def spider_some_note_v2(self, notes: list, cookies_str: str, base_path: dict, save_choice: str,
+                            excel_name: str = '',
+                            proxies=None):
+        if (save_choice == 'all' or save_choice == 'excel') and excel_name == '':
+            raise ValueError('excel_name 不能为空')
+
+        # 初始化Excel文件
+        if save_choice == 'all' or save_choice == 'excel':
+            file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            headers = ['笔记id', '笔记url', '笔记类型', '用户id', '用户主页url', '昵称', '头像url', '标题', '描述',
+                       '点赞数量', '收藏数量', '评论数量', '分享数量', '视频封面url', '视频地址url', '图片地址url列表',
+                       '标签', '上传时间', 'ip归属地']
+            ws.append(headers)
+            wb.save(file_path)
+            logger.info(f'已创建Excel文件: {file_path}')
+
+        num = 0
+        download_num = 0
+
+        # 创建Excel写入对象
+        if save_choice == 'all' or save_choice == 'excel':
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+
+        for note_url in notes:
+            success = False
+            note_info = None
+            try:
+                success, msg, note_info = self.spider_note(note_url, cookies_str, proxies)
+            except Exception as e:
+                logger.error(f"笔记爬取失败（已重试）: {note_url} | 错误: {str(e)}")
+                msg = str(e)
+
+            num += 1
+            logger.info(f'已完成数量 {num}')
+
+            # 随机休眠
+            sleep_time = random.uniform(2, 3)
+            logger.debug(f'随机休眠 {sleep_time:.2f} 秒')
+            time.sleep(sleep_time)
+
+            if note_info is not None and success:
+                # 存储数据到Excel（逐条写入）
+                if save_choice == 'all' or save_choice == 'excel':
+                    try:
+                        data = {k: norm_text(str(v)) for k, v in note_info.items()}
+                        ws.append(list(data.values()))
+                        wb.save(file_path)  # 立即保存
+                        logger.debug(f'已写入笔记: {note_info["note_id"]}')
+                    except Exception as e:
+                        logger.error(f"写入Excel失败: {str(e)}")
+
+                # 下载媒体文件
+                if save_choice == 'all' or 'media' in save_choice:
+                    try:
+                        download_note(note_info, base_path['media'], save_choice)
+                        download_num += 1
+                        logger.info(f'已下载 {download_num} 条数据，请不要关闭程序！！')
+                    except Exception as e:
+                        logger.error(f"下载媒体失败: {str(e)}")
+
+                # 立即清理缓存
+                del note_info
+                note_info = None
+
+        # 关闭Excel工作簿
+        if save_choice == 'all' or save_choice == 'excel':
+            try:
+                wb.close()
+                logger.info(f'Excel文件已保存: {file_path}')
+            except Exception as e:
+                logger.error(f"关闭Excel文件失败: {str(e)}")
+
     def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str,
                              excel_name: str = '', proxies=None):
         """
@@ -144,7 +222,7 @@ class Data_Spider():
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = user_url.split('/')[-1].split('?')[0]
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
+            self.spider_some_note_v1(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
         except Exception as e:
             success = False
             msg = e
@@ -180,7 +258,7 @@ class Data_Spider():
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = query
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
+            self.spider_some_note_v2(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
         except Exception as e:
             success = False
             msg = e
@@ -188,6 +266,9 @@ class Data_Spider():
         return note_list, success, msg
 
 
+# E:\GitHub\social-media-dataset\dataset
+# F:\dataset2
+# E:\dataset3
 if __name__ == '__main__':
     """
         此文件为爬虫的入口文件，可以直接运行
@@ -196,12 +277,13 @@ if __name__ == '__main__':
         感谢star和follow
     """
 
-    dataset1 = ["广州荔湾生活", "永庆坊烟火气"]
+    # dataset1 = ["广州荔湾生活", "永庆坊烟火气"]
 
-    dataset2 = ["永庆坊市井", "永庆坊生活"]
-    dataset3 = ["恩宁路烟火气", "恩宁路市井"]
-    for query in dataset1:
-        root_path = "F://dataset2//XHS/"
+    dataset2 = ["永庆坊生活"]
+    # dataset3 = ["恩宁路烟火气", "恩宁路市井"]
+
+    for query in dataset2:
+        root_path = "E://dataset3//XHS/"
         media_path = root_path + query + "/media_datas"
         excel_path = root_path + query + "/excel_datas"
         cookies_str, base_path = init(media_path, excel_path)

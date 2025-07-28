@@ -204,11 +204,15 @@ def save_to_xlsx(datas, file_path, type='note'):
 
 def download_media(path, name, url, type):
     if type == 'image':
+        logger.info(f'正在下载图片 {url}')
         content = requests.get(url).content
+        logger.info('图片下载成功，正在保存')
         with open(path + '/' + name + '.jpg', mode="wb") as f:
             f.write(content)
     elif type == 'video':
+        logger.info(f'正在下载视频 {url}')
         res = requests.get(url, stream=True)
+        logger.info('视频下载成功，正在保存')
         size = 0
         chunk_size = 1024 * 1024
         with open(path + '/' + name + '.mp4', mode="wb") as f:
@@ -235,6 +239,7 @@ def save_user_detail(user, path):
 
 
 def save_note_detail(note, path):
+    logger.info('正在保存笔记文本内容')
     with open(f'{path}/detail.txt', mode="w", encoding="utf-8") as f:
         # 逐行输出到txt里
         f.write(f"笔记id: {note['note_id']}\n")
