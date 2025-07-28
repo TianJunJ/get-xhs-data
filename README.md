@@ -1,4 +1,9 @@
+原作者 https://github.com/cv-cat/Spider_XHS
+
+此处仅用于临时学习
+
 ## 🛠️ 快速开始
+
 ### ⛳运行环境
 - Python 3.7+
 - Node.js 18+
